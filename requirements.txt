@@ -1,0 +1,25 @@
+# TARA Finserv backend — Render.com deployment
+
+# Core web
+fastapi==0.115.6
+starlette==0.41.3
+pydantic==2.10.4
+pydantic[email]==2.10.4
+python-multipart==0.0.20
+
+# ASGI server (Render runs this directly)
+uvicorn[standard]==0.32.1
+
+# Env + auth
+python-dotenv==1.0.1
+PyJWT==2.10.1
+bcrypt==4.2.1
+
+# MySQL driver
+PyMySQL==1.1.1
+
+# Twilio for OTP
+twilio==9.4.1
+
+# Outbound HTTPS
+requests==2.32.3

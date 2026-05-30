@@ -1,0 +1,198 @@
+==============================================================
+ TARA Finserv — Backend on Render.com (Hybrid Setup)
+==============================================================
+
+ARCHITECTURE
+------------
+  Frontend: https://tarafinserv.com           (Hostripples cPanel — already done)
+  Backend:  https://tara-finserv-api.onrender.com  (Render.com — this guide)
+  Database: Hostripples MySQL                  (via Remote MySQL access)
+
+
+--------------------------------------------------------------
+PART A — Make your Hostripples MySQL accessible from Render
+--------------------------------------------------------------
+
+(Render runs on different servers than Hostripples, so we need
+ to allow connections from outside.)
+
+1. Log in to cPanel.
+2. Open "Remote MySQL" (under Databases section).
+3. In the "Add Access Host" field, enter:
+        %
+   (Yes — just one percent sign. It means "allow connections
+    from any IP". We'll secure with a strong password.)
+4. Click "Add Host".
+
+You'll now see "%" in the list of allowed hosts. ✅
+
+
+5. Find your Hostripples server hostname/IP.
+   - cPanel home page → look at the "General Information" panel
+     on the right side.
+   - Find "Shared IP Address" — it's usually like 103.117.x.x
+   - Write it down. Example: 103.117.212.145
+   - (You can also use the server name like server1.hostripples.com
+     if shown — IP is more reliable.)
+
+
+--------------------------------------------------------------
+PART B — Push the backend code to GitHub
+--------------------------------------------------------------
+
+Render deploys from GitHub. If you don't have an account:
+   1. Go to https://github.com  → Sign up (free, 2 min)
+   2. Verify your email.
+
+Now create a repo for the backend:
+   1. github.com → top right "+" → "New repository"
+   2. Repository name:  tara-finserv-backend
+   3. Description (optional): TARA Finserv FastAPI backend
+   4. Public  (private also works on Render free plan)
+   5. ✅ TICK "Add a README file"
+   6. Click "Create repository"
+
+Upload the files:
+   1. Inside the new repo page, click "Add file" → "Upload files".
+   2. Drag-and-drop ALL files from THIS folder (the one you're
+      reading this DEPLOY-RENDER.txt in):
+         server.py
+         mongo_mysql.py
+         requirements.txt
+         Procfile
+         runtime.txt
+         render.yaml
+         .gitignore
+         .env.example   (this one is safe to upload — no secrets)
+         DEPLOY-RENDER.txt
+   3. ⚠️ DO NOT upload .env if you have one with real passwords.
+   4. Scroll to the bottom → "Commit changes" → green button.
+
+
+--------------------------------------------------------------
+PART C — Deploy on Render
+--------------------------------------------------------------
+
+1. Go to https://render.com  → Sign up (use "Sign in with GitHub")
+2. After login, click "+ New" (top right) → "Web Service".
+3. Connect your GitHub account (if it's not connected yet).
+4. Search for and select the "tara-finserv-backend" repository.
+
+5. Fill in the deployment form:
+       Name:           tara-finserv-api
+       Region:         Singapore (or whatever is closest to India)
+       Branch:         main
+       Runtime:        Python 3
+       Build Command:  pip install -r requirements.txt
+       Start Command:  uvicorn server:app --host 0.0.0.0 --port $PORT
+       Instance Type:  Free
+
+6. Scroll down to "Environment Variables" → click "Add Environment Variable"
+   and add the following (one at a time):
+
+       MYSQL_HOST         = <your Hostripples server IP from Part A step 5>
+                            example: 103.117.212.145
+       MYSQL_PORT         = 3306
+       MYSQL_USER         = taraaut1_tarafs        (whatever YOUR cPanel DB user is)
+       MYSQL_PASSWORD     = <your DB password>
+       MYSQL_DB           = taraaut1_tarafs        (whatever YOUR cPanel DB name is)
+       JWT_SECRET         = make-a-long-random-string-32+chars
+       ADMIN_EMAIL        = admin@tarafinserv.com
+       ADMIN_PASSWORD     = Tara@Admin2026
+       CORS_ORIGINS       = https://tarafinserv.com,https://www.tarafinserv.com
+
+7. Click "Create Web Service" at the bottom.
+
+8. Render will now:
+   - Clone your GitHub repo
+   - Install Python 3.11
+   - Install all packages from requirements.txt (~2 min)
+   - Start the server with uvicorn
+
+   Watch the live log scroll. When you see:
+       INFO:     Uvicorn running on http://0.0.0.0:10000
+   → SUCCESS! 🎉
+
+9. At the top of the Render page, you'll see your service URL:
+       https://tara-finserv-api.onrender.com   (your name may differ)
+   
+   Copy this URL — you'll need it in Part D.
+
+
+--------------------------------------------------------------
+PART D — Connect your frontend to the new backend
+--------------------------------------------------------------
+
+1. cPanel → File Manager → public_html or tarafinserv.com folder.
+2. Open `config.js` → right-click → Edit.
+3. Change the line to (use YOUR exact Render URL):
+
+       window.__BACKEND_URL__ = "https://tara-finserv-api.onrender.com";
+
+4. Save.
+
+5. Done! Visit https://tarafinserv.com  — everything should work.
+
+
+--------------------------------------------------------------
+PART E — Test
+--------------------------------------------------------------
+
+Open in browser:
+
+    1. https://tara-finserv-api.onrender.com/api/health
+       Expected: {"ok":true,"service":"tara-finserv","time":"..."}
+
+    2. https://tarafinserv.com
+       Expected: homepage loads, EMI calculator works.
+
+    3. https://tarafinserv.com/admin
+       Login: admin@tarafinserv.com / Tara@Admin2026
+       Expected: admin dashboard appears.
+
+    4. https://tarafinserv.com/agent/register
+       Submit form → expect agent code "TF00001".
+
+
+--------------------------------------------------------------
+NOTES ABOUT THE FREE TIER
+--------------------------------------------------------------
+
+Render's free plan SLEEPS your service after 15 minutes of no traffic.
+On the next visit, it WAKES up in 30–60 seconds.
+
+For a brand-new website with few visitors, this is fine. When the
+business picks up:
+  - Upgrade to Render's $7/mo "Starter" plan → no sleeping.
+  - OR use a free uptime monitor (e.g. UptimeRobot) to ping your
+    /api/health URL every 10 minutes so it never sleeps.
+
+
+--------------------------------------------------------------
+TROUBLESHOOTING
+--------------------------------------------------------------
+
+Render build fails with "ModuleNotFoundError"
+   → Open Render logs → look for the missing module name.
+     Add it to requirements.txt → commit on GitHub → Render auto-redeploys.
+
+Build succeeds but service crashes at startup
+   → Most likely: wrong MySQL credentials.
+     Render → Environment tab → fix value → click "Save, Rebuild and Deploy".
+
+"Can't connect to MySQL server"
+   → Either:
+     a) Remote MySQL wildcard "%" was not added in cPanel — re-check Part A.
+     b) Hostripples blocks port 3306 from outside (some plans do).
+        Contact Hostripples support: "Please open port 3306 / enable
+        remote MySQL for my account."
+     c) Wrong host IP — must be your shared server IP, not your domain.
+
+CORS errors in browser console
+   → Verify CORS_ORIGINS env var on Render = exactly your frontend URL.
+   → After changing, click "Manual Deploy" → "Clear build cache & deploy".
+
+First visit to https://tarafinserv.com is slow
+   → Normal — backend was asleep, waking up. Refresh after 30 sec.
+
+==============================================================
